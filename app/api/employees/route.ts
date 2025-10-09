@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { mockEmployees } from "@/lib/mock-data"
 import { EmploymentType, PaymentFrequency } from "@/lib/types/database"
+import { createAuditLog } from "@/lib/audit/logger"
 
 const createEmployeeSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -18,22 +19,44 @@ const createEmployeeSchema = z.object({
   bankAccountNumber: z.string().min(1, "Bank account number is required"),
   bankName: z.string().min(1, "Bank name is required"),
   taxNumber: z.string().optional(),
+  // Salary structure
+  allowances: z.number().optional(),
+  overtimeRate: z.number().optional(),
+  healthInsurancePremium: z.number().optional(),
+  retirement401kPercent: z.number().optional(),
+  taxFilingStatus: z.enum(["single", "married", "head_of_household"]).optional(),
+  taxAllowances: z.number().optional(),
+  stateCode: z.string().optional(),
 })
 
+/**
+ * GET /api/employees
+ * List employees with filters and pagination
+ */
 export async function GET(request: NextRequest) {
   try {
     const companyId = request.headers.get("x-company-id")
+    const userId = request.headers.get("x-user-id")
+    const userRole = request.headers.get("x-user-role")
+
+    // Authorization check
+    if (!companyId || !userId) {
+      return NextResponse.json({ success: false, error: "Unauthorized: Missing session" }, { status: 401 })
+    }
+
     const searchParams = request.nextUrl.searchParams
     const search = searchParams.get("search")
     const department = searchParams.get("department")
     const status = searchParams.get("status")
+    const page = Number.parseInt(searchParams.get("page") || "1")
+    const limit = Number.parseInt(searchParams.get("limit") || "20")
+    const sortBy = searchParams.get("sortBy") || "createdAt"
+    const sortOrder = searchParams.get("sortOrder") || "desc"
 
     let filteredEmployees = mockEmployees
 
-    // Filter by company
-    if (companyId) {
-      filteredEmployees = filteredEmployees.filter((emp) => emp.companyId === companyId)
-    }
+    // Filter by company (CRITICAL: Always scope by company)
+    filteredEmployees = filteredEmployees.filter((emp) => emp.companyId === companyId)
 
     // Filter by search
     if (search) {
@@ -59,10 +82,20 @@ export async function GET(request: NextRequest) {
       filteredEmployees = filteredEmployees.filter((emp) => !emp.isActive)
     }
 
+    const total = filteredEmployees.length
+    const totalPages = Math.ceil(total / limit)
+    const offset = (page - 1) * limit
+    const paginatedEmployees = filteredEmployees.slice(offset, offset + limit)
+
     return NextResponse.json({
       success: true,
-      data: filteredEmployees,
-      total: filteredEmployees.length,
+      data: paginatedEmployees,
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+      },
     })
   } catch (error) {
     console.error("[v0] Error fetching employees:", error)
@@ -70,17 +103,29 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/**
+ * POST /api/employees
+ * Create new employee with initial salary structure
+ */
 export async function POST(request: NextRequest) {
   try {
     const companyId = request.headers.get("x-company-id")
-    if (!companyId) {
-      return NextResponse.json({ success: false, error: "Company ID is required" }, { status: 403 })
+    const userId = request.headers.get("x-user-id")
+    const userRole = request.headers.get("x-user-role")
+
+    // Authorization check
+    if (!companyId || !userId) {
+      return NextResponse.json({ success: false, error: "Unauthorized: Missing session" }, { status: 401 })
+    }
+
+    // Role-based authorization
+    if (userRole !== "admin" && userRole !== "payroll_admin") {
+      return NextResponse.json({ success: false, error: "Forbidden: Insufficient permissions" }, { status: 403 })
     }
 
     const body = await request.json()
     const validatedData = createEmployeeSchema.parse(body)
 
-    // In production, this would create in database
     const newEmployee = {
       id: String(mockEmployees.length + 1),
       companyId,
@@ -91,10 +136,27 @@ export async function POST(request: NextRequest) {
       updatedAt: new Date(),
     }
 
-    return NextResponse.json({
-      success: true,
-      data: newEmployee,
+    await createAuditLog({
+      companyId,
+      userId,
+      action: "CREATE",
+      entityType: "Employee",
+      entityId: newEmployee.id,
+      changes: {
+        created: validatedData,
+      },
+      ipAddress: request.headers.get("x-forwarded-for") || undefined,
+      userAgent: request.headers.get("user-agent") || undefined,
     })
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: newEmployee,
+        message: "Employee created successfully",
+      },
+      { status: 201 },
+    )
   } catch (error) {
     if (error instanceof z.ZodError) {
       return NextResponse.json({ success: false, error: "Validation error", details: error.errors }, { status: 400 })
