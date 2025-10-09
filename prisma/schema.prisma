@@ -111,32 +111,32 @@ model User {
   auditLogs     AuditLog[]
   invitedBy     UserInvitation[] @relation("InvitedBy")
   invitations   UserInvitation[] @relation("Invitee")
+  sessions      Session[]
 
   @@index([companyId])
   @@index([email])
 }
 
-model UserInvitation {
-  id          String    @id @default(cuid())
-  email       String
-  role        UserRole
-  companyId   String
-  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  invitedById String
-  invitedBy   User      @relation("InvitedBy", fields: [invitedById], references: [id])
+  // Multi-tenant enforcement: session is locked to a company
+  companyId    String
   
-  inviteeId   String?
-  invitee     User?     @relation("Invitee", fields: [inviteeId], references: [id])
+  token        String   @unique
+  expiresAt    DateTime
+  ipAddress    String?
+  userAgent    String?
   
-  token       String    @unique
-  expiresAt   DateTime
-  acceptedAt  DateTime?
-  createdAt   DateTime  @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
+  @@index([userId])
   @@index([companyId])
-  @@index([email])
   @@index([token])
+  @@index([expiresAt])
 }
 
 // ============================================
@@ -492,6 +492,8 @@ model Integration {
   
   // Configuration (stored as JSON)
   config          Json?
+  
+  encryptedCredentials String?  // Encrypted API keys, tokens, etc.
   
   lastSyncAt      DateTime?
   lastSyncStatus  String?
