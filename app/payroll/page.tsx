@@ -1,103 +1,47 @@
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Plus } from "lucide-react"
-import { PayrollRunTable } from "@/components/payroll-run-table"
-import { mockPayrollRuns } from "@/lib/mock-data"
-import { PayrollStatus } from "@/lib/types/database"
+// app/payroll/page.tsx
+import Link from 'next/link'
+import { prisma } from '@/lib/prisma' // create a thin wrapper exporting a singleton PrismaClient
+import { revalidatePath } from 'next/cache'
 
-export default function PayrollPage() {
-  // Generate more mock payroll runs
-  const allPayrollRuns = [
-    ...mockPayrollRuns,
-    {
-      id: "3",
-      companyId: "1",
-      name: "February 2024 Payroll",
-      periodStart: new Date("2024-02-01"),
-      periodEnd: new Date("2024-02-29"),
-      paymentDate: new Date("2024-03-01"),
-      status: PayrollStatus.DISBURSED,
-      totalGross: 2398450,
-      totalNet: 1798837,
-      totalTax: 479690,
-      totalDeductions: 119923,
-      currency: "USD",
-      isDryRun: false,
-      createdById: "1",
-      createdAt: new Date("2024-02-25"),
-      updatedAt: new Date("2024-03-01"),
+async function createRun() {
+  'use server'
+  const now = new Date()
+  const month = now.getMonth() + 1
+  const year = now.getFullYear()
+  const run = await prisma.payrollRun.upsert({
+    where: {
+      companyId_month_year: { companyId: 'default-company', month, year }
     },
-    {
-      id: "4",
-      companyId: "1",
-      name: "January 2024 Payroll",
-      periodStart: new Date("2024-01-01"),
-      periodEnd: new Date("2024-01-31"),
-      paymentDate: new Date("2024-02-01"),
-      status: PayrollStatus.DISBURSED,
-      totalGross: 2412330,
-      totalNet: 1809247,
-      totalTax: 482466,
-      totalDeductions: 120617,
-      currency: "USD",
-      isDryRun: false,
-      createdById: "1",
-      createdAt: new Date("2024-01-25"),
-      updatedAt: new Date("2024-02-01"),
-    },
-  ]
+    update: {},
+    create: { companyId: 'default-company', month, year }
+  })
+  revalidatePath('/payroll')
+  return run.id
+}
 
+export default async function PayrollPage() {
+  const runs = await prisma.payrollRun.findMany({
+    orderBy: [{ year: 'desc' }, { month: 'desc' }]
+  })
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Payroll Runs</h1>
-          <p className="text-muted-foreground mt-1">Create and manage payroll processing cycles</p>
-        </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          New Payroll Run
-        </Button>
-      </div>
-
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input type="search" placeholder="Search payroll runs..." className="pl-9 bg-muted/50 border-border" />
-        </div>
-        <Select defaultValue="all">
-          <SelectTrigger className="w-48 bg-muted/50 border-border">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="pending">Pending Approval</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="disbursed">Disbursed</SelectItem>
-            <SelectItem value="failed">Failed</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select defaultValue="2024">
-          <SelectTrigger className="w-32 bg-muted/50 border-border">
-            <SelectValue placeholder="Year" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="2024">2024</SelectItem>
-            <SelectItem value="2023">2023</SelectItem>
-            <SelectItem value="2022">2022</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex items-center justify-between text-sm">
-        <p className="text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{allPayrollRuns.length}</span> payroll runs
-        </p>
-      </div>
-
-      <PayrollRunTable payrollRuns={allPayrollRuns} />
+    <div className="p-6 space-y-4">
+      <form action={createRun}>
+        <button className="px-4 py-2 rounded-md border">
+          Create current month run
+        </button>
+      </form>
+      <ul className="space-y-2">
+        {runs.map((r: any) => (
+          <li key={r.id} className="border rounded-md p-3 flex justify-between">
+            <span>
+              {String(r.month).padStart(2, '0')}/{r.year} – {r.status}
+            </span>
+            <Link className="underline" href={`/payroll/${r.id}`}>
+              Open
+            </Link>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

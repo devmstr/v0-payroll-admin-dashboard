@@ -93,45 +93,43 @@ enum AuditAction {
 // ============================================
 
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String
-  passwordHash  String
-  role          UserRole  @default(VIEWER)
-  companyId     String?
-  company       Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
-  isActive      Boolean   @default(true)
-  lastLoginAt   DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  passwordHash String
+  role         UserRole @default(VIEWER)
+  companyId    String?
+  company      Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
-  approvals     Approval[]
-  auditLogs     AuditLog[]
-  invitedBy     UserInvitation[] @relation("InvitedBy")
-  invitations   UserInvitation[] @relation("Invitee")
-  sessions      Session[]
+  approvals Approval[]
+  auditLogs AuditLog[]
+  sessions  Session[]
 
   @@index([companyId])
   @@index([email])
 }
 
 model Session {
-  id           String   @id @default(cuid())
-  userId       String
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   // Multi-tenant enforcement: session is locked to a company
-  companyId    String
-  
-  token        String   @unique
-  expiresAt    DateTime
-  ipAddress    String?
-  userAgent    String?
-  
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  companyId String
+
+  token     String   @unique
+  expiresAt DateTime
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
   @@index([companyId])
@@ -144,44 +142,21 @@ model Session {
 // ============================================
 
 model Company {
-  id                String   @id @default(cuid())
-  name              String
-  legalName         String
-  taxId             String   @unique
-  registrationNumber String?
-  
-  // Address
-  address           String
-  city              String
-  state             String
-  postalCode        String
-  country           String   @default("US")
-  
-  // Settings
-  currency          String   @default("USD")
-  fiscalYearStart   Int      @default(1) // Month (1-12)
-  payrollFrequency  PayrollFrequency @default(MONTHLY)
-  
-  // Banking
-  bankName          String?
-  bankAccountNumber String?
-  bankRoutingNumber String?
-  
-  isActive          Boolean  @default(true)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  // Relations
-  users             User[]
-  employees         Employee[]
-  payrollRuns       PayrollRun[]
-  bankTransfers     BankTransfer[]
-  taxFilings        TaxFiling[]
-  integrations      Integration[]
-  auditLogs         AuditLog[]
-  userInvitations   UserInvitation[]
-
-  @@index([taxId])
+  id           String         @id @default(cuid())
+  name         String         @unique
+  nif          String? // Tax number
+  cnasNumber   String? // Employer ID
+  createdAt    DateTime       @default(now())
+  phone        String?
+  address      String?
+  updatedAt    DateTime       @updatedAt
+  employees    Employee[]
+  payrollRuns  PayrollRun[]
+  User         User[]
+  BankTransfer BankTransfer[]
+  TaxFiling    TaxFiling[]
+  Integration  Integration[]
+  AuditLog     AuditLog[]
 }
 
 // ============================================
@@ -189,61 +164,37 @@ model Company {
 // ============================================
 
 model Employee {
-  id                String          @id @default(cuid())
-  companyId         String
-  company           Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
-  // Personal Information
-  employeeId        String          // Company-specific employee ID
-  firstName         String
-  lastName          String
-  email             String
-  phone             String?
-  dateOfBirth       DateTime?
-  
-  // Address
-  address           String?
-  city              String?
-  state             String?
-  postalCode        String?
-  country           String          @default("US")
-  
-  // Employment Details
-  department        String
-  position          String
-  employmentType    EmploymentType  @default(FULL_TIME)
-  status            EmployeeStatus  @default(ACTIVE)
-  hireDate          DateTime
-  terminationDate   DateTime?
-  
-  // Compensation
-  baseSalary        Decimal         @db.Decimal(12, 2)
-  currency          String          @default("USD")
-  payrollFrequency  PayrollFrequency @default(MONTHLY)
-  
-  // Banking
-  bankName          String?
-  bankAccountNumber String?
-  bankRoutingNumber String?
-  
-  // Tax Information
-  taxId             String?         // SSN or equivalent
-  taxFilingStatus   String?         // Single, Married, etc.
-  taxAllowances     Int             @default(0)
-  
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id              String            @id @default(cuid())
+  companyId       String
+  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  firstName       String
+  lastName        String
+  nss             String? // CNAS number
+  nif             String? // tax ID
+  hireDate        DateTime
+  contracts       Contract[]
+  payslips        Payslip[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  PayrollItem     PayrollItem[]
+  BankTransfer    BankTransfer[]
+  EmployeeBenefit EmployeeBenefit[]
+  EmployeeLoan    EmployeeLoan[]
 
-  // Relations
-  payrollItems      PayrollItem[]
-  bankTransfers     BankTransfer[]
-  benefits          EmployeeBenefit[]
-  loans             EmployeeLoan[]
-
-  @@unique([companyId, employeeId])
   @@index([companyId])
-  @@index([email])
-  @@index([status])
+}
+
+model Contract {
+  id              String    @id @default(cuid())
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  startDate       DateTime
+  endDate         DateTime?
+  baseSalary      Float // Monthly base
+  grade           String? // job grade/category if needed
+  workingTimeRate Float // % of full-time (e.g., 100.00)
+  cnasEligible    Boolean   @default(true)
+  // anything else from your SRS can be added here
 }
 
 // ============================================
@@ -251,78 +202,87 @@ model Employee {
 // ============================================
 
 model PayrollRun {
-  id              String         @id @default(cuid())
-  companyId       String
-  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
-  name            String
-  payPeriodStart  DateTime
-  payPeriodEnd    DateTime
-  payDate         DateTime
-  
-  status          PayrollStatus  @default(DRAFT)
-  isDryRun        Boolean        @default(false)
-  
-  // Totals
-  totalGross      Decimal        @default(0) @db.Decimal(12, 2)
-  totalDeductions Decimal        @default(0) @db.Decimal(12, 2)
-  totalNet        Decimal        @default(0) @db.Decimal(12, 2)
-  totalTax        Decimal        @default(0) @db.Decimal(12, 2)
-  employeeCount   Int            @default(0)
-  
-  // Processing
-  processedAt     DateTime?
-  approvedAt      DateTime?
-  disbursedAt     DateTime?
-  
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  id           String         @id @default(cuid())
+  companyId    String
+  company      Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  month        Int
+  year         Int
+  status       String         @default("draft") // draft|approved|paid
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  payslips     Payslip[]
+  PayrollItem  PayrollItem[]
+  BankTransfer BankTransfer[]
+  Approval     Approval[]
 
-  // Relations
-  payrollItems    PayrollItem[]
-  approvals       Approval[]
-  bankTransfers   BankTransfer[]
+  @@unique([companyId, month, year])
+  @@index([companyId, year, month])
+}
 
-  @@index([companyId])
-  @@index([status])
-  @@index([payDate])
+model Payslip {
+  id           String     @id @default(cuid())
+  payrollRunId String
+  employeeId   String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employee     Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  gross        Float
+  net          Float
+  totalAllow   Float      @default(0)
+  totalDeduct  Float      @default(0)
+  details      Json // line items (allowances/deductions)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([payrollRunId])
+  @@index([employeeId])
+}
+
+model RulesConfig {
+  id            String    @id @default(cuid())
+  companyId     String? // null => default/global rules
+  key           String
+  value         Json // flexible: e.g. { "rate": 0.09 } or whole tax table
+  effectiveFrom DateTime  @default(now())
+  effectiveTo   DateTime? // null => still valid
+
+  @@index([companyId, key, effectiveFrom])
 }
 
 model PayrollItem {
-  id              String      @id @default(cuid())
-  payrollRunId    String
-  payrollRun      PayrollRun  @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  
-  employeeId      String
-  employee        Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  
+  id           String     @id @default(cuid())
+  payrollRunId String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
   // Earnings
-  basePay         Decimal     @default(0) @db.Decimal(12, 2)
-  overtime        Decimal     @default(0) @db.Decimal(12, 2)
-  bonus           Decimal     @default(0) @db.Decimal(12, 2)
-  commission      Decimal     @default(0) @db.Decimal(12, 2)
-  allowances      Decimal     @default(0) @db.Decimal(12, 2)
-  
+  basePay    Decimal @default(0) @db.Decimal(12, 2)
+  overtime   Decimal @default(0) @db.Decimal(12, 2)
+  bonus      Decimal @default(0) @db.Decimal(12, 2)
+  commission Decimal @default(0) @db.Decimal(12, 2)
+  allowances Decimal @default(0) @db.Decimal(12, 2)
+
   // Deductions
-  federalTax      Decimal     @default(0) @db.Decimal(12, 2)
-  stateTax        Decimal     @default(0) @db.Decimal(12, 2)
-  socialSecurity  Decimal     @default(0) @db.Decimal(12, 2)
-  medicare        Decimal     @default(0) @db.Decimal(12, 2)
-  healthInsurance Decimal     @default(0) @db.Decimal(12, 2)
-  retirement401k  Decimal     @default(0) @db.Decimal(12, 2)
-  otherDeductions Decimal     @default(0) @db.Decimal(12, 2)
-  
+  federalTax      Decimal @default(0) @db.Decimal(12, 2)
+  stateTax        Decimal @default(0) @db.Decimal(12, 2)
+  socialSecurity  Decimal @default(0) @db.Decimal(12, 2)
+  medicare        Decimal @default(0) @db.Decimal(12, 2)
+  healthInsurance Decimal @default(0) @db.Decimal(12, 2)
+  retirement401k  Decimal @default(0) @db.Decimal(12, 2)
+  otherDeductions Decimal @default(0) @db.Decimal(12, 2)
+
   // Totals
-  grossPay        Decimal     @default(0) @db.Decimal(12, 2)
-  totalDeductions Decimal     @default(0) @db.Decimal(12, 2)
-  netPay          Decimal     @default(0) @db.Decimal(12, 2)
-  
+  grossPay        Decimal @default(0) @db.Decimal(12, 2)
+  totalDeductions Decimal @default(0) @db.Decimal(12, 2)
+  netPay          Decimal @default(0) @db.Decimal(12, 2)
+
   // Hours (for hourly employees)
-  regularHours    Decimal?    @db.Decimal(8, 2)
-  overtimeHours   Decimal?    @db.Decimal(8, 2)
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  regularHours  Decimal? @db.Decimal(8, 2)
+  overtimeHours Decimal? @db.Decimal(8, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@unique([payrollRunId, employeeId])
   @@index([payrollRunId])
@@ -334,37 +294,37 @@ model PayrollItem {
 // ============================================
 
 model BankTransfer {
-  id              String         @id @default(cuid())
-  companyId       String
-  company         Company        @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
-  payrollRunId    String?
-  payrollRun      PayrollRun?    @relation(fields: [payrollRunId], references: [id])
-  
-  employeeId      String
-  employee        Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  
-  amount          Decimal        @db.Decimal(12, 2)
-  currency        String         @default("USD")
-  
-  status          TransferStatus @default(PENDING)
-  
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  payrollRunId String?
+  payrollRun   PayrollRun? @relation(fields: [payrollRunId], references: [id])
+
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  amount   Decimal @db.Decimal(12, 2)
+  currency String  @default("USD")
+
+  status TransferStatus @default(PENDING)
+
   // Bank Details
-  bankName        String
-  accountNumber   String
-  routingNumber   String
-  
+  bankName      String
+  accountNumber String
+  routingNumber String
+
   // Processing
   referenceNumber String?
   failureReason   String?
-  retriedCount    Int            @default(0)
-  
-  scheduledAt     DateTime
-  processedAt     DateTime?
-  completedAt     DateTime?
-  
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  retriedCount    Int     @default(0)
+
+  scheduledAt DateTime
+  processedAt DateTime?
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([payrollRunId])
@@ -377,20 +337,20 @@ model BankTransfer {
 // ============================================
 
 model Approval {
-  id            String         @id @default(cuid())
-  payrollRunId  String
-  payrollRun    PayrollRun     @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
-  
-  approverId    String
-  approver      User           @relation(fields: [approverId], references: [id])
-  
-  status        ApprovalStatus @default(PENDING)
-  comments      String?
-  
-  approvedAt    DateTime?
-  rejectedAt    DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id           String     @id @default(cuid())
+  payrollRunId String
+  payrollRun   PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+
+  approverId String
+  approver   User   @relation(fields: [approverId], references: [id])
+
+  status   ApprovalStatus @default(PENDING)
+  comments String?
+
+  approvedAt DateTime?
+  rejectedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([payrollRunId])
   @@index([approverId])
@@ -402,24 +362,24 @@ model Approval {
 // ============================================
 
 model TaxFiling {
-  id              String          @id @default(cuid())
-  companyId       String
-  company         Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
-  filingType      String          // W-2, 1099, 941, etc.
-  taxYear         Int
-  quarter         Int?            // For quarterly filings
-  
-  status          TaxFilingStatus @default(NOT_FILED)
-  
-  dueDate         DateTime
-  filedDate       DateTime?
-  
-  amount          Decimal?        @db.Decimal(12, 2)
-  documentUrl     String?
-  
-  createdAt       DateTime        @default(now())
-  updatedAt       DateTime        @updatedAt
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  filingType String // W-2, 1099, 941, etc.
+  taxYear    Int
+  quarter    Int? // For quarterly filings
+
+  status TaxFilingStatus @default(NOT_FILED)
+
+  dueDate   DateTime
+  filedDate DateTime?
+
+  amount      Decimal? @db.Decimal(12, 2)
+  documentUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([status])
@@ -431,46 +391,46 @@ model TaxFiling {
 // ============================================
 
 model EmployeeBenefit {
-  id              String   @id @default(cuid())
-  employeeId      String
-  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  
-  benefitType     String   // Health, Dental, Vision, Life, etc.
-  provider        String
-  planName        String
-  
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  benefitType String // Health, Dental, Vision, Life, etc.
+  provider    String
+  planName    String
+
   employeeContribution Decimal @db.Decimal(12, 2)
   employerContribution Decimal @db.Decimal(12, 2)
-  
-  startDate       DateTime
-  endDate         DateTime?
-  
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+
+  startDate DateTime
+  endDate   DateTime?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([employeeId])
 }
 
 model EmployeeLoan {
-  id              String   @id @default(cuid())
-  employeeId      String
-  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  
-  loanType        String   // Advance, Emergency, etc.
-  principalAmount Decimal  @db.Decimal(12, 2)
-  remainingAmount Decimal  @db.Decimal(12, 2)
-  
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  loanType        String // Advance, Emergency, etc.
+  principalAmount Decimal @db.Decimal(12, 2)
+  remainingAmount Decimal @db.Decimal(12, 2)
+
   installmentAmount Decimal @db.Decimal(12, 2)
   installmentCount  Int
   paidInstallments  Int     @default(0)
-  
-  startDate       DateTime
-  endDate         DateTime?
-  
-  isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+
+  startDate DateTime
+  endDate   DateTime?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([employeeId])
 }
@@ -480,27 +440,27 @@ model EmployeeLoan {
 // ============================================
 
 model Integration {
-  id              String            @id @default(cuid())
-  companyId       String
-  company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
-  name            String
-  type            String            // BANK, ACCOUNTING, HRIS, TAX, etc.
-  provider        String
-  
-  status          IntegrationStatus @default(DISCONNECTED)
-  
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  name     String
+  type     String // BANK, ACCOUNTING, HRIS, TAX, etc.
+  provider String
+
+  status IntegrationStatus @default(DISCONNECTED)
+
   // Configuration (stored as JSON)
-  config          Json?
-  
-  encryptedCredentials String?  // Encrypted API keys, tokens, etc.
-  
-  lastSyncAt      DateTime?
-  lastSyncStatus  String?
-  
-  isActive        Boolean           @default(true)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  config Json?
+
+  encryptedCredentials String? // Encrypted API keys, tokens, etc.
+
+  lastSyncAt     DateTime?
+  lastSyncStatus String?
+
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([companyId])
   @@index([type])
@@ -511,22 +471,22 @@ model Integration {
 // ============================================
 
 model AuditLog {
-  id          String      @id @default(cuid())
-  companyId   String
-  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  
-  userId      String
-  user        User        @relation(fields: [userId], references: [id])
-  
-  action      AuditAction
-  entityType  String      // Employee, PayrollRun, etc.
-  entityId    String
-  
-  changes     Json?       // Before/after values
-  ipAddress   String?
-  userAgent   String?
-  
-  createdAt   DateTime    @default(now())
+  id        String  @id @default(cuid())
+  companyId String
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  action     AuditAction
+  entityType String // Employee, PayrollRun, etc.
+  entityId   String
+
+  changes   Json? // Before/after values
+  ipAddress String?
+  userAgent String?
+
+  createdAt DateTime @default(now())
 
   @@index([companyId])
   @@index([userId])

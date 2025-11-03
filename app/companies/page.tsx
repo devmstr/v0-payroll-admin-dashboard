@@ -1,135 +1,108 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Search, Plus, Building2, Users, DollarSign, MapPin } from "lucide-react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
+import Link from 'next/link'
+import { listCompanies } from './actions'
+import { AddCompanyDialog } from './_components/add-company-dialog'
+import { CompaniesToolbar } from './_components/companies-toolbar'
+import { ActionsMenu } from './_components/company-actions'
 
-export default function CompaniesPage() {
-  const companies = [
-    {
-      id: "1",
-      name: "Acme Corporation",
-      legalName: "Acme Corp Ltd.",
-      country: "United States",
-      currency: "USD",
-      employees: 1284,
-      monthlyPayroll: "$2,456,890",
-      status: "active",
-      taxId: "12-3456789",
-    },
-    {
-      id: "2",
-      name: "TechStart Inc",
-      legalName: "TechStart Incorporated",
-      country: "Canada",
-      currency: "CAD",
-      employees: 342,
-      monthlyPayroll: "$892,450",
-      status: "active",
-      taxId: "987654321RC0001",
-    },
-    {
-      id: "3",
-      name: "Global Solutions",
-      legalName: "Global Solutions GmbH",
-      country: "Germany",
-      currency: "EUR",
-      employees: 567,
-      monthlyPayroll: "€1,234,560",
-      status: "active",
-      taxId: "DE123456789",
-    },
-  ]
+export const dynamic = 'force-dynamic'
+
+type PageProps = {
+  searchParams?: { q?: string; cursor?: string | null; take?: string }
+}
+
+export default async function CompaniesPage({ searchParams }: PageProps) {
+  const q = searchParams?.q ?? ''
+  const cursor = searchParams?.cursor ?? null
+  const take = searchParams?.take ? Number(searchParams.take) : undefined
+
+  const { items, nextCursor, hasNext } = await listCompanies({
+    q,
+    cursor,
+    take
+  })
 
   return (
-    <div className="space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Companies</h1>
-          <p className="text-muted-foreground mt-1">Manage your multi-company payroll operations</p>
+        <h1 className="text-xl font-semibold">Companies</h1>
+        <div className="flex gap-2">
+          <CompaniesToolbar initialQuery={q} />
+          <AddCompanyDialog />
         </div>
-        <Button>
-          <Plus className="w-4 h-4 mr-2" />
-          Add Company
-        </Button>
       </div>
 
-      <Card className="bg-card border-border">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-foreground">All Companies</CardTitle>
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="Search companies..." className="pl-9 w-[300px] bg-background border-border" />
-              </div>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow className="border-border hover:bg-transparent">
-                <TableHead className="text-muted-foreground">Company</TableHead>
-                <TableHead className="text-muted-foreground">Location</TableHead>
-                <TableHead className="text-muted-foreground">Employees</TableHead>
-                <TableHead className="text-muted-foreground">Monthly Payroll</TableHead>
-                <TableHead className="text-muted-foreground">Status</TableHead>
-                <TableHead className="text-muted-foreground text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {companies.map((company) => (
-                <TableRow key={company.id} className="border-border">
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Building2 className="w-5 h-5 text-primary" />
-                      </div>
-                      <div>
-                        <div className="font-medium text-foreground">{company.name}</div>
-                        <div className="text-xs text-muted-foreground">{company.legalName}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-foreground">{company.country}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {company.currency}
-                      </Badge>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Users className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-foreground font-mono">{company.employees}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-foreground font-mono">{company.monthlyPayroll}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="bg-success/10 text-success border-success/20">
-                      {company.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm">
-                      View Details
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <div className="border rounded-md overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/50">
+            <tr className="text-left">
+              <th className="p-3 w-[26%]">Name</th>
+              <th className="p-3">NIF</th>
+              <th className="p-3">CNAS #</th>
+              <th className="p-3">Email</th>
+              <th className="p-3">Phone</th>
+              <th className="p-3">Address</th>
+              <th className="p-3 w-[120px]">Created</th>
+              <th className="p-3 w-[80px]">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={8}
+                  className="p-6 text-center text-muted-foreground"
+                >
+                  {q
+                    ? 'No companies match your query.'
+                    : 'No companies yet. Use “Add Company” to create one.'}
+                </td>
+              </tr>
+            ) : (
+              items.map((c) => (
+                <tr key={c.id} className="border-t">
+                  <td className="p-3 font-medium">
+                    <Link
+                      className="underline underline-offset-2"
+                      href={`/companies/${c.id}`}
+                    >
+                      {c.name}
+                    </Link>
+                  </td>
+                  <td className="p-3">{c.nif ?? '—'}</td>
+                  <td className="p-3">{c.cnasNumber ?? '—'}</td>
+                  <td className="p-3">{c.phone ?? '—'}</td>
+                  <td className="p-3">{c.address ?? '—'}</td>
+                  <td className="p-3">
+                    {new Date(c.createdAt).toLocaleDateString()}
+                  </td>
+                  <td className="p-3">
+                    <ActionsMenu company={c} />
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex justify-between">
+        {/* Previous is simply back via query-less pagination (we're using cursor forward only).
+           If you want bi-directional, add a prev stack in URL state. */}
+        <div />
+        {hasNext ? (
+          <Link
+            className="text-sm underline"
+            href={`/companies?${new URLSearchParams({
+              q,
+              cursor: nextCursor ?? ''
+            }).toString()}`}
+          >
+            Next →
+          </Link>
+        ) : (
+          <span className="text-sm text-muted-foreground">End of results</span>
+        )}
+      </div>
     </div>
   )
 }
