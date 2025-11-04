@@ -1,5 +1,12 @@
 // prisma/seed.ts
-import { PrismaClient, UserRole } from '@prisma/client'
+import {
+  PrismaClient,
+  UserRole,
+  EmploymentType,
+  EmployeeStatus,
+  PayrollFrequency,
+  Employee
+} from '@prisma/client'
 import { faker } from '@faker-js/faker'
 import { hashSync } from 'bcryptjs'
 
@@ -70,6 +77,186 @@ const jobTitles = [
 ]
 
 const sections = ['IT', 'Finance', 'HR', 'Sales', 'Operations', 'Marketing']
+
+const bankNames = [
+  'Banque Nationale dAlgerie',
+  'Banque de Developpement Local',
+  'Banque Exterieure dAlgerie',
+  'Trust Bank Algeria',
+  'Societe Generale Algerie'
+]
+
+async function generateFakeEmployeesForCompany(
+  company: { id: string; name: string },
+  count = 12
+) {
+  const existingEmployees = await prisma.employee.findMany({
+    where: { companyId: company.id },
+    include: { contracts: true }
+  })
+
+  if (existingEmployees.length > 0) {
+    console.log(
+      `👥 Found ${existingEmployees.length} existing employees for ${company.name}, skipping generation`
+    )
+    return existingEmployees
+  }
+
+  console.log(`👥 Generating ${count} employees for ${company.name}`)
+
+  const companySlug = company.name.toLowerCase().replace(/\s+/g, '')
+  const companyPrefix =
+    company.name
+      .replace(/[^A-Za-z0-9]/g, '')
+      .slice(0, 3)
+      .toUpperCase() || 'EMP'
+
+  type EmployeeWithContract = Employee & {
+    contracts: { baseSalary: number }[]
+  }
+
+  const employees: Awaited<EmployeeWithContract[]> = []
+
+  for (let i = 0; i < count; i++) {
+    const firstName = faker.helpers.arrayElement(algerianFirstNames)
+    const lastName = faker.helpers.arrayElement(algerianLastNames)
+    const hireDate = faker.date.between({
+      from: '2020-01-01',
+      to: '2024-06-01'
+    })
+
+    const employmentType = faker.helpers.arrayElement([
+      EmploymentType.FULL_TIME,
+      EmploymentType.PART_TIME,
+      EmploymentType.CONTRACT,
+      EmploymentType.INTERN
+    ])
+
+    const department = faker.helpers.arrayElement(sections)
+    const position = faker.helpers.arrayElement(jobTitles)
+    const nss = `NSS${faker.string.numeric(8)}`
+    const nif = `NIF${faker.string.numeric(10)}`
+    const baseSalary = faker.number.float({
+      min: 30000,
+      max: 120000,
+      fractionDigits: 2
+    })
+    const paymentFrequency = faker.helpers.arrayElement([
+      PayrollFrequency.MONTHLY,
+      PayrollFrequency.BI_WEEKLY,
+      PayrollFrequency.WEEKLY
+    ])
+    const bankName = faker.helpers.arrayElement(bankNames)
+    const bankAccountNumber = faker.finance.accountNumber({ length: 16 })
+    const employeeNumber = `${companyPrefix}-${String(i + 1).padStart(4, '0')}`
+    const email = `${firstName}.${lastName}@${companySlug}.dz`.toLowerCase()
+
+    const employee = await prisma.employee.create({
+      data: {
+        companyId: company.id,
+        firstName,
+        lastName,
+        email,
+        employeeNumber,
+        department,
+        position,
+        employmentType,
+        status: EmployeeStatus.ACTIVE,
+        nss,
+        nif,
+        taxNumber: nif,
+        hireDate,
+        baseSalary,
+        currency: 'DZD',
+        paymentFrequency,
+        bankAccountNumber,
+        bankName,
+        isActive: true,
+        contracts: {
+          create: {
+            startDate: hireDate,
+            endDate: faker.helpers.maybe(
+              () =>
+                faker.date.between({
+                  from: hireDate,
+                  to: '2026-12-31'
+                }),
+              { probability: 0.2 }
+            ),
+            baseSalary,
+            grade: faker.helpers.arrayElement([
+              'A1',
+              'A2',
+              'B1',
+              'B2',
+              'C1',
+              'C2'
+            ]),
+            workingTimeRate: faker.helpers.arrayElement([100, 80, 60, 50]),
+            cnasEligible: faker.datatype.boolean({ probability: 0.9 })
+          }
+        }
+      },
+      include: {
+        contracts: true
+      }
+    })
+
+    if (i < 8) {
+      await prisma.employeeBenefit.create({
+        data: {
+          employeeId: employee.id,
+          benefitType: faker.helpers.arrayElement([
+            'Health Insurance',
+            'Retirement',
+            'Life Insurance'
+          ]),
+          provider: faker.helpers.arrayElement([
+            'CNAS',
+            'CASNOS',
+            'Private Insurance'
+          ]),
+          planName: faker.helpers.arrayElement([
+            'Basic Plan',
+            'Premium Plan',
+            'Family Plan'
+          ]),
+          employeeContribution: baseSalary * 0.02,
+          employerContribution: baseSalary * 0.05,
+          startDate: hireDate,
+          isActive: true
+        }
+      })
+    }
+
+    if (i < 4) {
+      await prisma.employeeLoan.create({
+        data: {
+          employeeId: employee.id,
+          loanType: faker.helpers.arrayElement([
+            'Salary Advance',
+            'Emergency Loan',
+            'Housing Loan'
+          ]),
+          principalAmount:
+            baseSalary * faker.number.float({ min: 0.5, max: 3 }),
+          remainingAmount:
+            baseSalary * faker.number.float({ min: 0.1, max: 2.5 }),
+          installmentAmount: baseSalary * 0.2,
+          installmentCount: faker.number.int({ min: 3, max: 12 }),
+          paidInstallments: faker.number.int({ min: 0, max: 6 }),
+          startDate: faker.date.between({ from: hireDate, to: new Date() }),
+          isActive: true
+        }
+      })
+    }
+
+    employees.push(employee)
+  }
+
+  console.log(`👥 Created ${employees.length} employees for ${company.name}`)
+  return employees
+}
 
 async function main() {
   console.log('🌱 Starting database seeding...')
@@ -227,119 +414,7 @@ async function main() {
 
   // Create employees for each company
   for (const company of companies) {
-    const employees = []
-    const employeesPerCompany = 12
-
-    for (let i = 0; i < employeesPerCompany; i++) {
-      const firstName = faker.helpers.arrayElement(algerianFirstNames)
-      const lastName = faker.helpers.arrayElement(algerianLastNames)
-      const hireDate = faker.date.between({
-        from: '2020-01-01',
-        to: '2024-06-01'
-      })
-      const birthDate = faker.date.between({
-        from: '1970-01-01',
-        to: '1995-12-31'
-      })
-
-      // Algerian-specific data
-      const nss = `NSS${faker.string.numeric(8)}`
-      const nif = `NIF${faker.string.numeric(10)}`
-      const baseSalary = faker.number.float({
-        min: 30000,
-        max: 120000,
-        fractionDigits: 2
-      })
-
-      const employee = await prisma.employee.create({
-        data: {
-          companyId: company.id,
-          firstName,
-          lastName,
-          nss,
-          nif,
-          hireDate,
-          contracts: {
-            create: {
-              startDate: hireDate,
-              endDate: faker.helpers.maybe(
-                () => faker.date.between({ from: hireDate, to: '2026-12-31' }),
-                { probability: 0.2 }
-              ),
-              baseSalary,
-              grade: faker.helpers.arrayElement([
-                'A1',
-                'A2',
-                'B1',
-                'B2',
-                'C1',
-                'C2'
-              ]),
-              workingTimeRate: faker.helpers.arrayElement([100, 80, 50]),
-              cnasEligible: faker.datatype.boolean({ probability: 0.9 })
-            }
-          }
-        },
-        include: {
-          contracts: true
-        }
-      })
-
-      employees.push(employee)
-
-      // Create employee benefits for some employees
-      if (i < 8) {
-        await prisma.employeeBenefit.create({
-          data: {
-            employeeId: employee.id,
-            benefitType: faker.helpers.arrayElement([
-              'Health Insurance',
-              'Retirement',
-              'Life Insurance'
-            ]),
-            provider: faker.helpers.arrayElement([
-              'CNAS',
-              'CASNOS',
-              'Private Insurance'
-            ]),
-            planName: faker.helpers.arrayElement([
-              'Basic Plan',
-              'Premium Plan',
-              'Family Plan'
-            ]),
-            employeeContribution: baseSalary * 0.02,
-            employerContribution: baseSalary * 0.05,
-            startDate: hireDate,
-            isActive: true
-          }
-        })
-      }
-
-      // Create loans for some employees
-      if (i < 4) {
-        await prisma.employeeLoan.create({
-          data: {
-            employeeId: employee.id,
-            loanType: faker.helpers.arrayElement([
-              'Salary Advance',
-              'Emergency Loan',
-              'Housing Loan'
-            ]),
-            principalAmount:
-              baseSalary * faker.number.float({ min: 0.5, max: 3 }),
-            remainingAmount:
-              baseSalary * faker.number.float({ min: 0.1, max: 2.5 }),
-            installmentAmount: baseSalary * 0.2,
-            installmentCount: faker.number.int({ min: 3, max: 12 }),
-            paidInstallments: faker.number.int({ min: 0, max: 6 }),
-            startDate: faker.date.between({ from: hireDate, to: new Date() }),
-            isActive: true
-          }
-        })
-      }
-    }
-
-    console.log(`👥 Created ${employees.length} employees for ${company.name}`)
+    const employees = await generateFakeEmployeesForCompany(company, 12)
 
     // Create sample payroll runs for the current year
     const currentYear = new Date().getFullYear()

@@ -1,88 +1,227 @@
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Search, Download, Upload } from "lucide-react"
-import { EmployeeTable } from "@/components/employee-table"
-import { mockEmployees } from "@/lib/mock-data"
-import { InviteUserDialog } from "@/components/invite-user-dialog"
+import { EmploymentType, Prisma } from '@prisma/client'
+import { Upload, Download } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import {
+  EmployeeTable,
+  type EmployeeListItem
+} from '@/components/employee-table'
+import { InviteUserDialog } from '@/components/invite-user-dialog'
+import { prisma } from '@/lib/prisma'
+import { EmployeesFilters, UNASSIGNED_DEPARTMENT_VALUE } from './_components/employees-filters'
+import { EmployeesPagination } from './_components/employees-pagination'
+import { CreateEmployeeDialog } from './create-employee-dialog'
 
-export default function EmployeesPage() {
-  // Generate more mock employees for demonstration
-  const allEmployees = [
-    ...mockEmployees,
-    {
-      id: "3",
-      companyId: "1",
-      firstName: "Michael",
-      lastName: "Chen",
-      email: "michael@acme.com",
-      employeeId: "EMP-003",
-      department: "Engineering",
-      position: "Frontend Developer",
-      employmentType: "FULL_TIME" as const,
-      hireDate: new Date("2023-03-15"),
-      baseSalary: 95000,
-      currency: "USD",
-      paymentFrequency: "MONTHLY" as const,
-      bankAccountNumber: "****9012",
-      bankName: "Wells Fargo",
-      taxNumber: "456-78-9012",
-      isActive: true,
-      createdAt: new Date("2023-03-15"),
-      updatedAt: new Date("2024-03-20"),
-    },
-    {
-      id: "4",
-      companyId: "1",
-      firstName: "Emily",
-      lastName: "Davis",
-      email: "emily@acme.com",
-      employeeId: "EMP-004",
-      department: "Marketing",
-      position: "Marketing Manager",
-      employmentType: "FULL_TIME" as const,
-      hireDate: new Date("2023-04-01"),
-      baseSalary: 88000,
-      currency: "USD",
-      paymentFrequency: "MONTHLY" as const,
-      bankAccountNumber: "****3456",
-      bankName: "Chase Bank",
-      taxNumber: "789-01-2345",
-      isActive: true,
-      createdAt: new Date("2023-04-01"),
-      updatedAt: new Date("2024-03-18"),
-    },
-    {
-      id: "5",
-      companyId: "1",
-      firstName: "David",
-      lastName: "Wilson",
-      email: "david@acme.com",
-      employeeId: "EMP-005",
-      department: "Finance",
-      position: "Financial Analyst",
-      employmentType: "CONTRACT" as const,
-      hireDate: new Date("2023-05-10"),
-      baseSalary: 75000,
-      currency: "USD",
-      paymentFrequency: "MONTHLY" as const,
-      bankAccountNumber: "****7890",
-      bankName: "Bank of America",
-      taxNumber: "234-56-7890",
-      isActive: true,
-      createdAt: new Date("2023-05-10"),
-      updatedAt: new Date("2024-03-15"),
-    },
-  ]
+const DEFAULT_FILTER = 'all'
+const PAGE_SIZE = 10
+
+type SearchParamRecord = Record<string, string | string[] | undefined>
+
+type EmployeesPageProps = {
+  searchParams?: Promise<SearchParamRecord>
+}
+
+const employmentTypeValues = Object.values(EmploymentType)
+
+const getStringParam = (searchParams: SearchParamRecord, key: string): string => {
+  const value = searchParams[key]
+
+  if (Array.isArray(value)) {
+    return value[0] ?? ''
+  }
+
+  return value ?? ''
+}
+
+export default async function EmployeesPage({
+  searchParams
+}: EmployeesPageProps) {
+  const resolvedSearchParams = (await searchParams) ?? {}
+
+  const rawSearch = getStringParam(resolvedSearchParams, 'search')
+  const rawDepartment = getStringParam(resolvedSearchParams, 'department')
+  const rawEmploymentType = getStringParam(resolvedSearchParams, 'employmentType')
+  const rawPage = Number.parseInt(getStringParam(resolvedSearchParams, 'page'), 10)
+
+  const search = rawSearch.trim()
+  const departmentParam = rawDepartment || DEFAULT_FILTER
+  const employmentTypeParam = rawEmploymentType || DEFAULT_FILTER
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1
+  const take = PAGE_SIZE
+  const skip = (page - 1) * take
+
+  const filters: Prisma.EmployeeWhereInput[] = []
+
+  if (search.length > 0) {
+    filters.push({
+      OR: [
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { employeeNumber: { contains: search, mode: 'insensitive' } }
+      ]
+    })
+  }
+
+  if (departmentParam !== DEFAULT_FILTER) {
+    if (departmentParam === UNASSIGNED_DEPARTMENT_VALUE) {
+      filters.push({
+        OR: [{ department: null }, { department: '' }]
+      })
+    } else {
+      filters.push({
+        department: {
+          equals: departmentParam
+        }
+      })
+    }
+  }
+
+  if (
+    employmentTypeParam !== DEFAULT_FILTER &&
+    employmentTypeValues.includes(employmentTypeParam as EmploymentType)
+  ) {
+    filters.push({
+      employmentType: employmentTypeParam as EmploymentType
+    })
+  }
+
+  const where: Prisma.EmployeeWhereInput =
+    filters.length > 0 ? { AND: filters } : {}
+
+  const [initialEmployees, totalEmployees, departmentRecords, companies] =
+    await Promise.all([
+      prisma.employee.findMany({
+        where,
+        include: {
+          company: { select: { name: true } },
+          contracts: {
+            orderBy: { startDate: 'desc' },
+            take: 1
+          }
+        },
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take
+      }),
+      prisma.employee.count({ where }),
+      prisma.employee.findMany({
+        select: { department: true },
+        distinct: ['department']
+      }),
+      prisma.company.findMany({
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' }
+      })
+    ])
+
+  const totalPages = Math.max(1, Math.ceil(totalEmployees / take))
+
+  let employees = initialEmployees
+  let currentPage = page
+  let currentSkip = skip
+
+  if (
+    employees.length === 0 &&
+    totalEmployees > 0 &&
+    page > totalPages
+  ) {
+    currentPage = totalPages
+    currentSkip = (currentPage - 1) * take
+    employees = await prisma.employee.findMany({
+      where,
+      include: {
+        company: { select: { name: true } },
+        contracts: {
+          orderBy: { startDate: 'desc' },
+          take: 1
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: currentSkip,
+      take
+    })
+  }
+
+  const hasUnassignedDepartment = departmentRecords.some(
+    ({ department }) => !department || department.trim().length === 0
+  )
+
+  const departmentOptions = (() => {
+    const namedDepartments = departmentRecords
+      .map(({ department }) => department?.trim())
+      .filter(
+        (value): value is string => Boolean(value && value.length > 0)
+      )
+      .sort((a, b) => a.localeCompare(b))
+      .map((value) => ({
+        value,
+        label: value
+      }))
+
+    return hasUnassignedDepartment
+      ? [
+          { value: UNASSIGNED_DEPARTMENT_VALUE, label: 'Unassigned' },
+          ...namedDepartments
+        ]
+      : namedDepartments
+  })()
+
+  const normalisedDepartmentParam =
+    departmentParam !== DEFAULT_FILTER &&
+    !departmentOptions.some((option) => option.value === departmentParam)
+      ? DEFAULT_FILTER
+      : departmentParam
+
+  const normalisedEmploymentTypeParam =
+    employmentTypeParam !== DEFAULT_FILTER &&
+    !employmentTypeValues.includes(employmentTypeParam as EmploymentType)
+      ? DEFAULT_FILTER
+      : employmentTypeParam
+
+  const employeeRows: EmployeeListItem[] = employees.map((employee) => {
+    const latestContract = employee.contracts[0]
+    const baseSalary = latestContract?.baseSalary ?? employee.baseSalary ?? 0
+    const currency = employee.currency || 'DZD'
+
+    return {
+      id: employee.id,
+      firstName: employee.firstName,
+      lastName: employee.lastName,
+      email:
+        employee.email ??
+        `${employee.firstName}.${employee.lastName}@${employee.companyId.slice(
+          0,
+          6
+        )}.example`.toLowerCase(),
+      employeeNumber:
+        employee.employeeNumber ??
+        `EMP-${employee.id.slice(-6).toUpperCase()}`,
+      department: employee.department ?? 'Unassigned',
+      position: employee.position ?? 'Pending Assignment',
+      employmentType: employee.employmentType ?? EmploymentType.FULL_TIME,
+      baseSalary,
+      currency,
+      paymentFrequency: employee.paymentFrequency ?? 'MONTHLY',
+      isActive: employee.isActive
+    }
+  })
+
+  const hasResults = totalEmployees > 0 && employees.length > 0
+  const rangeStart = hasResults ? currentSkip + 1 : 0
+  const rangeEnd = hasResults ? currentSkip + employees.length : 0
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Employees</h1>
-          <p className="text-muted-foreground mt-1">Manage your workforce and employee information</p>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">
+            Employees
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage your workforce and employee information
+          </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline">
             <Upload className="w-4 h-4 mr-2" />
             Import CSV
@@ -91,52 +230,53 @@ export default function EmployeesPage() {
             <Download className="w-4 h-4 mr-2" />
             Export
           </Button>
+          <CreateEmployeeDialog companies={companies} />
           <InviteUserDialog />
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search by name, email, or employee ID..."
-            className="pl-9 bg-muted/50 border-border"
-          />
-        </div>
-        <Select defaultValue="all">
-          <SelectTrigger className="w-48 bg-muted/50 border-border">
-            <SelectValue placeholder="Department" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Departments</SelectItem>
-            <SelectItem value="engineering">Engineering</SelectItem>
-            <SelectItem value="hr">Human Resources</SelectItem>
-            <SelectItem value="marketing">Marketing</SelectItem>
-            <SelectItem value="finance">Finance</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select defaultValue="all">
-          <SelectTrigger className="w-48 bg-muted/50 border-border">
-            <SelectValue placeholder="Employment Type" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Types</SelectItem>
-            <SelectItem value="full_time">Full Time</SelectItem>
-            <SelectItem value="part_time">Part Time</SelectItem>
-            <SelectItem value="contract">Contract</SelectItem>
-            <SelectItem value="intern">Intern</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <EmployeesFilters
+        search={search}
+        department={normalisedDepartmentParam}
+        employmentType={normalisedEmploymentTypeParam}
+        departments={departmentOptions}
+        employmentTypes={employmentTypeValues}
+      />
 
       <div className="flex items-center justify-between text-sm">
         <p className="text-muted-foreground">
-          Showing <span className="font-medium text-foreground">{allEmployees.length}</span> employees
+          {hasResults ? (
+            <>
+              Showing{' '}
+              <span className="font-medium text-foreground">{rangeStart}</span>{' '}
+              –{' '}
+              <span className="font-medium text-foreground">{rangeEnd}</span> of{' '}
+              <span className="font-medium text-foreground">
+                {totalEmployees}
+              </span>{' '}
+              employees
+            </>
+          ) : (
+            'Showing 0 employees'
+          )}
+        </p>
+        <p className="text-muted-foreground hidden sm:block">
+          Page{' '}
+          <span className="font-medium text-foreground">
+            {Math.min(currentPage, totalPages)}
+          </span>{' '}
+          of{' '}
+          <span className="font-medium text-foreground">{totalPages}</span>
         </p>
       </div>
 
-      <EmployeeTable employees={allEmployees} />
+      <EmployeeTable employees={employeeRows} />
+
+      <EmployeesPagination
+        page={Math.min(currentPage, totalPages)}
+        pageSize={take}
+        total={totalEmployees}
+      />
     </div>
   )
 }

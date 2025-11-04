@@ -100,7 +100,6 @@ model User {
   role         UserRole @default(VIEWER)
   companyId    String?
   company      Company? @relation(fields: [companyId], references: [id], onDelete: Cascade)
-
   isActive    Boolean   @default(true)
   lastLoginAt DateTime?
   createdAt   DateTime  @default(now())
@@ -169,9 +168,23 @@ model Employee {
   company         Company           @relation(fields: [companyId], references: [id], onDelete: Cascade)
   firstName       String
   lastName        String
+  email           String?
+  employeeNumber  String?           @unique
+  department      String?
+  position        String?
+  employmentType  EmploymentType    @default(FULL_TIME)
+  status          EmployeeStatus    @default(ACTIVE)
   nss             String? // CNAS number
   nif             String? // tax ID
   hireDate        DateTime
+  terminationDate DateTime?
+  baseSalary      Float?
+  currency        String            @default("DZD")
+  paymentFrequency PayrollFrequency @default(MONTHLY)
+  bankAccountNumber String?
+  bankName        String?
+  taxNumber       String?
+  isActive        Boolean           @default(true)
   contracts       Contract[]
   payslips        Payslip[]
   createdAt       DateTime          @default(now())
@@ -182,6 +195,7 @@ model Employee {
   EmployeeLoan    EmployeeLoan[]
 
   @@index([companyId])
+  @@index([companyId, isActive])
 }
 
 model Contract {

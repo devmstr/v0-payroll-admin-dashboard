@@ -25,7 +25,11 @@ export default async function PayrollPage() {
   })
   return (
     <div className="p-6 space-y-4">
-      <form action={createRun}>
+      <form
+        action={() => {
+          createRun()
+        }}
+      >
         <button className="px-4 py-2 rounded-md border">
           Create current month run
         </button>

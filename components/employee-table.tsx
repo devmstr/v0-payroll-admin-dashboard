@@ -1,36 +1,63 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import Link from "next/link"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { MoreHorizontal, Eye, Edit, Trash2 } from "lucide-react"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import type { Employee } from "@/lib/types/database"
+import Link from 'next/link'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
+} from '@/components/ui/table'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { MoreHorizontal, Eye, Edit, Trash2 } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
+
+export interface EmployeeListItem {
+  id: string
+  firstName: string
+  lastName: string
+  email: string
+  employeeNumber: string
+  department: string
+  position: string
+  employmentType: string
+  baseSalary: number
+  currency: string
+  paymentFrequency: string
+  isActive: boolean
+}
 
 interface EmployeeTableProps {
-  employees: Employee[]
+  employees: EmployeeListItem[]
 }
 
 export function EmployeeTable({ employees }: EmployeeTableProps) {
-  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
-
   const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency,
+    if (!Number.isFinite(amount)) {
+      return '-'
+    }
+
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency
     }).format(amount)
   }
 
   const getEmploymentTypeBadge = (type: string) => {
-    const variants: Record<string, "default" | "secondary" | "outline"> = {
-      FULL_TIME: "default",
-      PART_TIME: "secondary",
-      CONTRACT: "outline",
-      INTERN: "outline",
+    const variants: Record<string, 'default' | 'secondary' | 'outline'> = {
+      FULL_TIME: 'default',
+      PART_TIME: 'secondary',
+      CONTRACT: 'outline',
+      INTERN: 'outline'
     }
-    return variants[type] || "default"
+    return variants[type] || 'default'
   }
 
   return (
@@ -50,21 +77,35 @@ export function EmployeeTable({ employees }: EmployeeTableProps) {
         </TableHeader>
         <TableBody>
           {employees.map((employee) => (
-            <TableRow key={employee.id} className="border-border hover:bg-muted/50">
-              <TableCell className="font-mono text-sm text-foreground">{employee.employeeId}</TableCell>
+            <TableRow
+              key={employee.id}
+              className="border-border hover:bg-muted/50"
+            >
+              <TableCell className="font-mono text-sm text-foreground">
+                {employee.employeeNumber}
+              </TableCell>
               <TableCell>
                 <div className="flex flex-col">
                   <span className="font-medium text-foreground">
                     {employee.firstName} {employee.lastName}
                   </span>
-                  <span className="text-xs text-muted-foreground">{employee.email}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {employee.email}
+                  </span>
                 </div>
               </TableCell>
-              <TableCell className="text-foreground">{employee.department}</TableCell>
-              <TableCell className="text-foreground">{employee.position}</TableCell>
+              <TableCell className="text-foreground">
+                {employee.department}
+              </TableCell>
+              <TableCell className="text-foreground">
+                {employee.position}
+              </TableCell>
               <TableCell>
-                <Badge variant={getEmploymentTypeBadge(employee.employmentType)} className="font-normal">
-                  {employee.employmentType.replace("_", " ")}
+                <Badge
+                  variant={getEmploymentTypeBadge(employee.employmentType)}
+                  className="font-normal"
+                >
+                  {employee.employmentType?.replace('_', ' ')}
                 </Badge>
               </TableCell>
               <TableCell className="font-mono text-sm text-foreground">
@@ -72,10 +113,10 @@ export function EmployeeTable({ employees }: EmployeeTableProps) {
               </TableCell>
               <TableCell>
                 <Badge
-                  variant={employee.isActive ? "default" : "secondary"}
+                  variant={employee.isActive ? 'default' : 'secondary'}
                   className="bg-success/10 text-success border-success/20"
                 >
-                  {employee.isActive ? "Active" : "Inactive"}
+                  {employee.isActive ? 'Active' : 'Inactive'}
                 </Badge>
               </TableCell>
               <TableCell>
